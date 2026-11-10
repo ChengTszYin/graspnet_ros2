@@ -1,0 +1,15 @@
+# Request
+int32 max_grasps
+float32 min_score
+int32 xmin
+int32 ymin
+int32 xmax
+int32 ymax
+---
+# Response
+bool success
+string message
+string frame_id
+geometry_msgs/Pose[] poses
+float32[] widths
+float32[] scores

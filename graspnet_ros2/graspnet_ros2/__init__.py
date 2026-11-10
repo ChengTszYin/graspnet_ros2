@@ -1,0 +1,1 @@
+"""graspnet_ros2 Python module: GraspNet node and ROS-free detector."""
