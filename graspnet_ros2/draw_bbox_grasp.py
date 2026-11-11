@@ -99,6 +99,7 @@ def main():
             cv2.imshow(window, view)
             cv2.waitKey(1)
             status = call_detect(node, box)
+            box = None
 
         draw = box
         if drag['down']:
@@ -110,6 +111,7 @@ def main():
         cv2.imshow(window, view)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
+            box = None
             break
         if key == ord('c'):
             box = None
