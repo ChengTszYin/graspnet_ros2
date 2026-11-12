@@ -21,10 +21,11 @@ class BoxGrasp(Node):
             history=HistoryPolicy.KEEP_LAST,
             depth=1,
         )
-        self.create_subscription(Image, '/camera/color/image_raw', self.on_image, qos)
+        self.create_subscription(Image, '/camera/camera/color/image_raw', self.on_image, qos)
         self.client = self.create_client(DetectGrasps, '/graspnet/detect')
 
     def on_image(self, msg):
+        print('got image', msg.width, msg.height, flush=True)
         self.frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
 

@@ -31,7 +31,7 @@ install(DIRECTORY launch config
 )
 
 install(PROGRAMS
-  script/run_graspnet_node.sh
+  graspnet_ros2/graspnet_node.py
   graspnet_ros2/draw_bbox_grasp.py
   DESTINATION lib/${PROJECT_NAME}
 )

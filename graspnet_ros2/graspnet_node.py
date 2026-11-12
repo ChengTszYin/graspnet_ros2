@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """ROS 2 node: thin adapter that delegates inference to a localhost worker.
 
 Runs on the system Python (3.10) with rclpy/cv_bridge from ROS 2 Humble. Stores
@@ -10,7 +11,6 @@ No torch/scipy/graspnet imports here: frames cross the wire as raw bytes + shape
 and grasps come back as plain lists, so this node never touches the worker's
 numpy/torch versions.
 """
-
 import threading
 from multiprocessing.connection import Client
 
@@ -40,9 +40,9 @@ class GraspNetNode(Node):
         self._depth_frame_id = ''
         self._depth_stamp_ns = None
 
-        self.declare_parameter('color_topic', '/camera/color/image_raw')
-        self.declare_parameter('depth_topic', '/camera/aligned_depth_to_color/image_raw')
-        self.declare_parameter('camera_info_topic', '/camera/color/camera_info')
+        self.declare_parameter('color_topic', '/camera/camera/color/image_raw')
+        self.declare_parameter('depth_topic', '/camera/camera/aligned_depth_to_color/image_raw')
+        self.declare_parameter('camera_info_topic', '/camera/camera/color/camera_info')
         self.declare_parameter('worker_host', '127.0.0.1')
         self.declare_parameter('worker_port', 50051)
         self.declare_parameter('worker_authkey', 'graspnet')

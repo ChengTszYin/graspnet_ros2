@@ -48,7 +48,7 @@ def generate_launch_description():
         ),
         Node(
             package='graspnet_ros2',
-            executable='run_graspnet_node.sh',
+            executable='graspnet_node.py',
             name='graspnet_node',
             output='screen',
             parameters=[config],
