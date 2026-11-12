@@ -1,0 +1,11 @@
+# DetectGraspsMask.srv
+sensor_msgs/Image mask          # binary or 0/255 mask, same size as color/depth
+int32 max_grasps
+float32 min_score
+---
+bool success
+string message
+string frame_id
+geometry_msgs/Pose[] poses
+float32[] widths
+float32[] scores

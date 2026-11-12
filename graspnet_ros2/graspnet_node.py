@@ -24,7 +24,7 @@ from sensor_msgs.msg import Image, CameraInfo
 from geometry_msgs.msg import Pose
 from cv_bridge import CvBridge, CvBridgeError
 
-from graspnet_ros2.srv import DetectGrasps
+from graspnet_ros2.srv import DetectGrasps, DetectGraspsMask
 
 
 class GraspNetNode(Node):
@@ -84,6 +84,10 @@ class GraspNetNode(Node):
         self.create_service(
             DetectGrasps, '/graspnet/detect', self._detect_cb,
             callback_group=self._service_group)
+        
+        self.create_service(
+            DetectGraspsMask, '/graspnet/sam_detect', self._detect_mask_cb,
+            callback_group=self._service_group)
 
         self.get_logger().info(
             'graspnet_node ready (worker=%s:%d)' % self._worker_address)
@@ -108,7 +112,7 @@ class GraspNetNode(Node):
             self._depth_frame_id = msg.header.frame_id
             self._depth_stamp_ns = (
                 msg.header.stamp.sec * 1_000_000_000 + msg.header.stamp.nanosec)
-
+        
     def _camera_info_cb(self, msg):
         camera = {
             'width': int(msg.width),
@@ -198,6 +202,84 @@ class GraspNetNode(Node):
             with self._lock:
                 self._busy = False
         return response
+    
+    def _detect_mask_cb(self, request, response):
+        with self._lock:
+            if self._busy:
+                response.success = False
+                response.message = "busy"
+                return response
+        if self._color is None or self._depth is None or self._camera is None:
+            response.success = False
+            response.message = 'missing color, depth, or camera info'
+            return response
+        max_age = float(self.get_parameter('max_frame_age_sec').value)
+        now_ns = self.get_clock().now().nanoseconds
+        age = (now_ns - self._depth_stamp_ns) * 1e-9
+        if age > max_age:
+            response.success = False
+            response.message = 'stale frame'
+            return response
+        color = self._color.copy()
+        depth = self._depth.copy()
+        camera = dict(self._camera)
+        frame_id = self._depth_frame_id
+        self._busy = True
+        try:
+            mask = self._bridge.imgmsg_to_cv2(request.mask, desired_encoding='mono8')
+            mask = (mask > 0).astype(np.uint8)
+            max_grasps = (int(request.max_grasps) if request.max_grasps > 0
+                            else int(self.get_parameter('max_grasps').value))
+            min_score = (float(request.min_score) if request.min_score > 0
+                            else float(self.get_parameter('min_score').value))
+            max_angle_deg = float(self.get_parameter('max_angle_deg').value)
+            payload = {
+                'color_bytes': color.tobytes(),
+                'color_shape': list(color.shape),
+                'depth_bytes': depth.tobytes(),
+                'depth_shape': list(depth.shape),
+                'mask_bytes': mask.tobytes(),          # new
+                'mask_shape': list(mask.shape),        # new
+                'camera': camera,
+                'max_grasps': max_grasps,
+                'min_score': min_score,
+                'max_angle_deg': max_angle_deg,
+            }
+            result = self._call_worker(payload)
+            
+            response.frame_id = frame_id
+            if not result.get('success', False):
+                response.success = False
+                response.message = result.get('message', 'worker failed')
+                return response
+
+            response.success = True
+            response.message = result.get('message', '')
+            for grasp in result.get('grasps', []):
+                pose = Pose()
+                translation = grasp['translation']
+                pose.position.x = float(translation[0])
+                pose.position.y = float(translation[1])
+                pose.position.z = float(translation[2])
+                quat = grasp['quaternion']
+                pose.orientation.x = float(quat[0])
+                pose.orientation.y = float(quat[1])
+                pose.orientation.z = float(quat[2])
+                pose.orientation.w = float(quat[3])
+                response.poses.append(pose)
+                response.widths.append(float(grasp['width']))
+                response.scores.append(float(grasp['score']))
+            
+        except Exception as exc:
+            response.success = False
+            response.message = 'inference failed: %s' % exc
+            response.frame_id = frame_id
+        finally:
+            with self._lock:
+                self._busy = False
+        return response
+            
+                
 
     def _call_worker(self, payload):
         conn = Client(self._worker_address, authkey=self._worker_authkey)

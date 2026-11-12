@@ -13,7 +13,8 @@ find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/DetectGrasps.srv"
-  DEPENDENCIES geometry_msgs
+  "srv/DetectGraspsMask.srv"
+  DEPENDENCIES geometry_msgs sensor_msgs
 )
 
 # rosidl already installs the generated graspnet_ros2 Python package (srv/).
@@ -32,7 +33,8 @@ install(DIRECTORY launch config
 
 install(PROGRAMS
   graspnet_ros2/graspnet_node.py
-  graspnet_ros2/draw_bbox_grasp.py
+  script/draw_bbox_grasp.py
+  script/sam_grasp.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
