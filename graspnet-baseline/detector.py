@@ -30,7 +30,7 @@ class CameraInfo:
         
 class GraspNetDetector:
     def __init__(self, checkpoint_path, num_point=20000, num_view=300,
-                 collision_thresh=0.01, voxel_size=0.01):
+                 collision_thresh=0.01, voxel_size=0.01, range=(0.15, 0.65)):
         self._pred_decode = pred_decode
         self._collision_detector_cls = ModelFreeCollisionDetector
         self._create_cloud = create_point_cloud_from_depth_image
@@ -41,7 +41,9 @@ class GraspNetDetector:
         self.collision_thresh = float(collision_thresh)
         self.voxel_size = float(voxel_size)
         self.device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-
+        minDistance, maxDistance = range
+        self.min_dist = minDistance
+        self.max_dist = maxDistance
         net = GraspNet(
             input_feature_dim=0,
             num_view=num_view,
@@ -89,7 +91,7 @@ class GraspNetDetector:
         if color is not None and color.ndim == 3 and color.shape[:2] == depth.shape[:2]:
             color_masked = color[valid]
 
-        near = (cloud[:, 2] > 0.15) & (cloud[:, 2] < 0.70)
+        near = (cloud[:, 2] > self.min_dist) & (cloud[:, 2] < self.max_dist)
         cloud = cloud[near]
         if color_masked is not None:
             color_masked = color_masked[near]

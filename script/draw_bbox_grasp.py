@@ -25,7 +25,6 @@ class BoxGrasp(Node):
         self.client = self.create_client(DetectGrasps, '/graspnet/detect')
 
     def on_image(self, msg):
-        print('got image', msg.width, msg.height, flush=True)
         self.frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
 
 

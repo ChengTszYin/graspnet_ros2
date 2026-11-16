@@ -6,8 +6,8 @@ set -e
 CONDA_BASE="/home/dllm/anaconda3"
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 
-CONFIG="${GRASPNET_CONFIG:-$HOME/student_ros/src/graspnet_ros2/config/graspnet.yaml}"
-WORKER_DIR="${WORKER_DIR:-$HOME/student_ros/src/graspnet_ros2/graspnet-baseline}"
+CONFIG="${GRASPNET_CONFIG:-$HOME/arms_ws/src/graspnet_ros2/config/graspnet.yaml}"
+WORKER_DIR="${WORKER_DIR:-$HOME/arms_ws/src/graspnet_ros2/graspnet-baseline}"
 
 echo "Starting GraspNet worker..."
 conda run -n vision --no-capture-output \

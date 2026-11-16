@@ -46,6 +46,7 @@ def build_detector(params):
         num_view=params.get('num_view', 300),
         collision_thresh=params.get('collision_thresh', 0.01),
         voxel_size=params.get('voxel_size', 0.01),
+        range=(params.get('minDistance', 0.15), params.get('maxDistance', 0.65))   
     )
     return detector, CameraInfo
 
@@ -132,6 +133,8 @@ def main():
     parser.add_argument('--host', default=None)
     parser.add_argument('--port', type=int, default=None)
     parser.add_argument('--authkey', default=None)
+    parser.add_argument('--minDistance', default=0.1)
+    parser.add_argument('--maxDistance', default=0.60)
     args = parser.parse_args()
 
     params = load_params(args.config)

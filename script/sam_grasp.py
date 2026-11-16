@@ -8,6 +8,7 @@ import numpy as np
 from ultralytics import SAM
 import cv2
 from graspnet_ros2.srv import DetectGraspsMask
+from robot_arm_interfaces.srv import RobotEntries
 
 class SamGrasp(Node):
     def __init__(self):
@@ -22,7 +23,10 @@ class SamGrasp(Node):
         )
         self.declare_parameter('sam_model', "/home/dllm/student_ros/src/graspnet_ros2/sam_ckp/mobile_sam.pt")
         self.create_subscription(Image, '/camera/camera/color/image_raw', self.on_image, qos)
-        self.client = self.create_client(DetectGraspsMask, '/graspnet/sam_detect')
+        self.grasp_client = self.create_client(DetectGraspsMask, '/graspnet/sam_detect')
+        self.moveit_client = self.create_client(RobotEntries, '/Moveit_Robo_Node')
+        self.last_result = None          # last DetectGraspsMask response
+        self.last_mask = None
         self.build_sam_model()
         
     def on_image(self, msg):
@@ -34,7 +38,7 @@ class SamGrasp(Node):
         self.model.info()
     
     def call_detect(self, node, point):
-        if not node.client.wait_for_service(timeout_sec=2.0):
+        if not node.grasp_client.wait_for_service(timeout_sec=2.0):
             print('service /graspnet/sam_detect not available')
             return 'service not available'
         
@@ -67,15 +71,47 @@ class SamGrasp(Node):
         req.min_score = 0.0
         req.mask = self.bridge.cv2_to_imgmsg(mask_np, encoding='mono8')
         
-        future = self.client.call_async(req)
+        future = self.grasp_client.call_async(req)
         while rclpy.ok() and not future.done():
             rclpy.spin_once(self, timeout_sec=0.05)
         result = future.result()
         if result is None:
             print('service call failed')
-            return 'service call failed'
-        print('success=%s message=%s grasps=%d' % (result.success, result.message, len(result.poses)))
-        return result.message, mask_np
+            return None, mask_np, 'service call failed'
+        
+        info = {
+            'success': result.success,
+            'message': result.message,
+            'frame_id': result.frame_id,
+            'poses': list(result.poses),
+            'widths': list(result.widths),
+            'scores': list(result.scores)
+        }
+        self.get_logger().info(
+            f"GraspNet: success={result.success} grasps={len(result.poses)} msg={result.message}"
+        )
+        return info, mask_np, 'ok'
+    
+    def call_moveit(self, poses):
+        """Send a list of Pose to RobotEntries service."""
+        if not self.moveit_client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error('MoveIt (RobotEntries) service not available')
+            return False, 'service not available'
+
+        req = RobotEntries.Request()
+        req.poses = poses
+
+        future = self.moveit_client.call_async(req)
+        while rclpy.ok() and not future.done():
+            rclpy.spin_once(self, timeout_sec=0.05)
+
+        result = future.result()
+        if result is None:
+            self.get_logger().error('MoveIt service call failed')
+            return False, 'call failed'
+
+        self.get_logger().info(f"MoveIt: success={result.success} msg={result.message}")
+        return result.success, result.message
 
 def main():
     rclpy.init()
@@ -104,25 +140,59 @@ def main():
             pending['point'] = (drag['x'], drag['y'])
         
         if pending['point'] is not None:
-            result, mask_np = node.call_detect(node, pending['point'])
+            info, mask_np, status = node.call_detect(node, pending['point'])
+            node.last_result = info
+            node.last_mask = mask_np
             pending['point'] = None
             if mask_np is not None:
                 overlay = view.copy()
                 overlay[mask_np > 0] = (0, 255, 0)          # green where mask is on
                 overlay = cv2.addWeighted(overlay, 0.6, overlay, 0.4, 0)
-            help = "Press c to close this window"
-            cv2.putText(overlay, help, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                if info and info.get('scores'):
+                    best_score = max(info['scores'])
+                    cv2.putText(
+                        overlay,
+                        f"best score: {best_score:.3f}  grasps: {len(info['poses'])}",
+                        (10, 30),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2
+                    )
+                    
+            cv2.putText(
+                overlay,
+                "m = send best grasp to MoveIt | c = close overlay | q = quit",
+                (10, 60),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1
+            )
             cv2.imshow("mobile_sam", overlay)
-            waitKey = cv2.waitKey(1)
+            # waitKey = cv2.waitKey(1)
                         
         cv2.imshow(window, view)
         waitKey = cv2.waitKey(1)
         if waitKey == ord('q'):
             break
-        if waitKey == ord('c'):
+        elif waitKey == ord('c'):
             cv2.destroyWindow("mobile_sam")
+        elif waitKey == ord('m'):
+            if node.last_result is None or not node.last_result.get('poses'):
+                node.get_logger().warn("No grasp result to send. Click an object first.")
+                continue
+
+            # pick highest score
+            scores = node.last_result['scores']
+            poses = node.last_result['poses']
+            best_idx = int(np.argmax(scores))
+            best_pose = poses[best_idx]
+            best_score = scores[best_idx]
+            best_width = node.last_result['widths'][best_idx] if node.last_result['widths'] else 0.0
+
+            node.get_logger().info(
+                f"Sending best grasp (score={best_score:.3f}, width={best_width:.3f}) to MoveIt..."
+            )
+            success, msg = node.call_moveit([best_pose])
+            print(f"MoveIt result: success={success} message={msg}")
     cv2.destroyAllWindows()
-        
+    node.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == "__main__":
     main()
